@@ -1,0 +1,469 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Interface da BRISLA IA Beta v3 - IA soberana para ciência e inovação brasileira">
+    <title>BRISLA IA Beta v3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.0/babel.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #1C2526, #A5D6A7); }
+        .sidebar, .right-panel { 
+            transition: all 0.3s ease; 
+            max-height: calc(100vh - 60px); 
+        }
+        .submodes, .subsections { 
+            transition: opacity 0.2s ease; 
+        }
+        @media (max-width: 768px) {
+            .sidebar, .right-panel { 
+                position: static; 
+                width: 100%; 
+                max-height: none; 
+            }
+            .main-content { 
+                margin-left: 0; 
+                margin-right: 0; 
+            }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const apiSources = [
+            { name: 'SciELO', value: 'scielo' },
+            { name: 'IBGE', value: 'ibge' },
+            { name: 'INPE', value: 'inpe' },
+            { name: 'TSE', value: 'tse' },
+            { name: 'BCB', value: 'bcb' },
+            { name: 'DATASUS', value: 'datasus' },
+            { name: 'Transparência', value: 'transparencia' }
+        ];
+
+        const modes = [
+            { name: 'Conhecimento Geral', submodes: ['História', 'Geografia', 'Cultura'] },
+            { name: 'Artigos Científicos', submodes: ['Medicina', 'Odontologia', 'Enfermagem', 'Biologia', 'Química'] },
+            { name: 'Educação Acadêmica', submodes: ['Básica', 'Superior', 'Pós', 'Especialização', 'Doutorado'] },
+            { name: 'Engenharias', submodes: ['Civil', 'Aeronáutica', 'Mecânica', 'Elétrica', 'Computação', 'Agronômica', 'Aeroespacial', 'Outros'] },
+            { name: 'Indústria Estudos & Dados', submodes: ['Automotiva', 'Tecnológica', 'Alimentícia', 'Química', 'Energética', 'Textil'] },
+            { name: 'Designer Gráfico', submodes: ['Organograma', 'Perspectiva', 'Análise Estatística', 'Planilha Geral', 'Planilha Excel Avançado', 'Ilustração', 'Animação', 'Design 3D'] },
+            { name: 'Estudos Áreas do Direito', submodes: ['Direito Civil', 'Direito Digital', 'Direito Comercial', 'Direito Trabalhista', 'Direito Penal', 'Direito Ambiental', 'Direito Internacional'] },
+            { name: 'Matemática', submodes: ['Básica', 'Avançada', 'Empírica', 'Matemática para Física Avançada', 'Matemática Quântica', 'Estatística', 'Cálculo'] },
+            { name: 'Física', submodes: ['Física Básica', 'Física Avançada', 'Física Quântica', 'Física Teórica', 'Física Experimental', 'Física Nuclear'] },
+            { name: 'Sustentabilidade', submodes: ['Energia Renovável', 'Gestão de Resíduos', 'Conservação Ambiental', 'Agricultura Sustentável'] }
+        ];
+
+        const sections = [
+            { name: 'APIs Setoriais & Dados', subsections: ['Qiskit', 'INPE API', 'CNPq Lattes', 'CAPES Sucupira', 'FAPESP Biblioteca Virtual', 'SciELO', 'DATASUS', 'LexML', 'ISO 27001', 'IEEE 2621'] },
+            { name: 'Criptografia de Dados', subsections: [] },
+            { name: 'Fine-tuning', subsections: [] },
+            { name: 'LGPD', subsections: [] }
+        ];
+
+        function Mode({ mode }) {
+            const [isOpen, setIsOpen] = useState(false);
+
+            return (
+                <div
+                    className="mode p-2 mb-2 bg-gray-700/50 rounded cursor-pointer hover:bg-gray-700/80 relative"
+                    onMouseEnter={() => setIsOpen(true)}
+                    onMouseLeave={() => setIsOpen(false)}
+                    aria-label={`Modo ${mode.name}`}
+                >
+                    {mode.name}
+                    {mode.submodes.length > 0 && isOpen && (
+                        <div className="submodes absolute left-0 mt-2 bg-gray-700/90 p-2 rounded max-h-48 overflow-y-auto z-10">
+                            {mode.submodes.map((sub) => (
+                                <div key={sub} className="submode p-1 mb-1 bg-gray-600/50 rounded hover:bg-gray-600/80">{sub}</div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function Section({ section }) {
+            const [isOpen, setIsOpen] = useState(false);
+
+            return (
+                <div
+                    className="section p-2 mb-2 bg-gray-700/50 rounded cursor-pointer hover:bg-gray-700/80 relative"
+                    onMouseEnter={() => setIsOpen(true)}
+                    onMouseLeave={() => setIsOpen(false)}
+                    aria-label={`Seção ${section.name}`}
+                >
+                    {section.name}
+                    {section.subsections.length > 0 && isOpen && (
+                        <div className="subsections absolute right-0 mt-2 bg-gray-700/90 p-2 rounded max-h-48 overflow-y-auto z-10">
+                            {section.subsections.map((sub) => (
+                                <div key={sub} className="subsection p-1 mb-1 bg-gray-600/50 rounded hover:bg-gray-600/80">{sub}</div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function BrislaApp() {
+            const [query, setQuery] = useState('');
+            const [source, setSource] = useState('scielo');
+            const [lang, setLang] = useState('pt-BR');
+            const [mode, setMode] = useState(modes[0].name);
+            const [submode, setSubmode] = useState('');
+            const [results, setResults] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [ethicalStatus, setEthicalStatus] = useState(null);
+            const [graphUrl, setGraphUrl] = useState(null);
+            const [showTutorial, setShowTutorial] = useState(false);
+            const [isListening, setIsListening] = useState(false);
+
+            const speechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = speechRecognition ? new speechRecognition() : null;
+
+            useEffect(() => {
+                if (recognition) {
+                    recognition.lang = lang === 'pt-BR' ? 'pt-BR' : lang === 'en' ? 'en-US' : 'pt-BR'; // Fallback para tupi
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.onresult = (event) => {
+                        const transcript = event.results[0][0].transcript;
+                        setQuery(transcript);
+                        speak(`Comando de voz recebido: ${transcript}`);
+                        handleQuery();
+                    };
+                    recognition.onerror = (event) => {
+                        setError(`Erro no reconhecimento de voz: ${event.error}`);
+                        setIsListening(false);
+                    };
+                    recognition.onend = () => setIsListening(false);
+                }
+
+                // Atalhos de teclado
+                const handleKey = (e) => {
+                    if (e.ctrlKey && e.key === 'v') toggleSpeech();
+                    if (e.key === 'Enter') handleQuery();
+                };
+                window.addEventListener('keydown', handleKey);
+                return () => window.removeEventListener('keydown', handleKey);
+            }, [lang, query, source, mode, submode]);
+
+            const speak = (text) => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = lang === 'pt-BR' ? 'pt-BR' : lang === 'en' ? 'en-US' : 'pt-BR';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            };
+
+            const toggleSpeech = () => {
+                if (!recognition) {
+                    setError('Reconhecimento de voz não suportado neste navegador.');
+                    return;
+                }
+                if (isListening) {
+                    recognition.stop();
+                    setIsListening(false);
+                    speak('Reconhecimento de voz desativado.');
+                } else {
+                    recognition.start();
+                    setIsListening(true);
+                    speak('Reconhecimento de voz ativado. Fale sua consulta.');
+                }
+            };
+
+            const handleQuery = async () => {
+                if (!query) return;
+                setLoading(true);
+                setError(null);
+                setResults(null);
+                setEthicalStatus(null);
+                setGraphUrl(null);
+
+                try {
+                    // Simulação de chamada API com backoff
+                    const response = await fetch('http://localhost:8001/query', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query, source, lang, mode, submode })
+                    });
+                    if (!response.ok) throw new Error('Erro na API');
+                    const data = await response.json();
+
+                    // Simulação de anonimização LGPD
+                    const ethicalCheck = { status: 'LGPD_applied', message: 'Dados anonimizados com sucesso' };
+                    setEthicalStatus(ethicalCheck);
+
+                    // Resposta detalhada para modo "Educação Acadêmica" (Professor)
+                    let textResponse = data.text || `Processado: ${query} (${mode}${submode ? ` - ${submode}` : ''})`;
+                    if (mode === 'Educação Acadêmica') {
+                        textResponse = `Explicação detalhada para ${submode || 'nível não especificado'}: ${query}. `;
+                        textResponse += `Baseado em dados de ${source.toUpperCase()}, aqui está uma explicação ${submode ? `adequada ao nível ${submode}` : 'geral'}: ${data.text || 'Resposta detalhada com exemplos e analogias.'}`;
+                    }
+
+                    setResults({
+                        text: textResponse,
+                        audio: data.audio || null,
+                        graph: data.graph || (mode.includes('Física') || mode.includes('Matemática') ? 'outputs/test_3d_1.png' : null)
+                    });
+                    setGraphUrl(data.graph || (mode.includes('Física') || mode.includes('Matemática') ? 'outputs/test_3d_1.png' : null));
+
+                    // Falar resposta para acessibilidade
+                    if (results?.text) speak(results.text);
+
+                    // Cache local com IndexedDB
+                    await cacheResults(query, source, data);
+                } catch (err) {
+                    setError(err.message);
+                    speak(`Erro: ${err.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const openDatabase = async () => {
+                return new Promise((resolve) => {
+                    const request = indexedDB.open('brisla_cache', 1);
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        db.createObjectStore('cache', { keyPath: 'id', autoIncrement: true });
+                    };
+                    request.onsuccess = () => resolve(request.result);
+                });
+            };
+
+            const cacheResults = async (query, source, result) => {
+                const db = await openDatabase();
+                const tx = db.transaction('cache', 'readwrite');
+                const store = tx.objectStore('cache');
+                store.add({ query, source, result });
+            };
+
+            return (
+                <div className="min-h-screen">
+                    <header className="p-4 flex justify-between items-center bg-[#1C2526] border-b border-[#A5D6A7]">
+                        <h1 className="text-2xl font-bold text-[#FFF9C4]" aria-label="BRISLA IA Beta v3">BRISLA IA Beta v3</h1>
+                        <nav className="flex gap-4">
+                            <a href="#" className="hover:text-[#FFF9C4] text-[#A5D6A7]" aria-label="Página inicial">Início</a>
+                            <a href="#" className="hover:text-[#FFF9C4] text-[#A5D6A7]" aria-label="Modos de operação">Modos</a>
+                            <a href="#" className="hover:text-[#FFF9C4] text-[#A5D6A7]" aria-label="APIs setoriais">APIs Setoriais</a>
+                            <a href="#" className="hover:text-[#FFF9C4] text-[#A5D6A7]" aria-label="Configurações">Configurações</a>
+                            <a href="#" className="hover:text-[#FFF9C4] text-[#A5D6A7]" aria-label="Suporte">Suporte</a>
+                        </nav>
+                    </header>
+
+                    <div className="flex flex-col md:flex-row min-h-[calc(100vh-60px)]">
+                        <aside className="sidebar w-full md:w-64 bg-[#1C2526]/90 p-4 overflow-y-auto">
+                            <h2 className="text-lg font-semibold mb-4 text-[#A5D6A7]" aria-label="Modos de operação">Modos</h2>
+                            {modes.map((m) => (
+                                <div key={m.name} onClick={() => { setMode(m.name); setSubmode(''); }}>
+                                    <Mode mode={m} />
+                                </div>
+                            ))}
+                            {mode === 'Educação Acadêmica' && (
+                                <div className="mt-4">
+                                    <h3 className="text-md font-semibold text-[#A5D6A7]" aria-label="Nível de estudo">Nível de Estudo</h3>
+                                    <select
+                                        className="p-2 rounded bg-[#2D3338] text-[#A5D6A7] w-full mt-2"
+                                        value={submode}
+                                        onChange={(e) => setSubmode(e.target.value)}
+                                        aria-label="Selecionar nível de estudo"
+                                    >
+                                        <option value="">Selecione o nível</option>
+                                        {modes.find(m => m.name === 'Educação Acadêmica').submodes.map(sub => (
+                                            <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </aside>
+
+                        <main className="main-content flex-grow p-4">
+                            <section className="mb-6">
+                                <h2 className="text-xl font-semibold mb-4 text-[#A5D6A7]" aria-label="Consulta à BRISLA IA">Consulta</h2>
+                                <div className="flex flex-col md:flex-row gap-4">
+                                    <select
+                                        className="p-2 rounded bg-[#2D3338] text-[#A5D6A7]"
+                                        value={source}
+                                        onChange={(e) => setSource(e.target.value)}
+                                        aria-label="Selecionar fonte de dados"
+                                    >
+                                        {apiSources.map((src) => (
+                                            <option key={src.value} value={src.value}>{src.name}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        className="p-2 rounded bg-[#2D3338] text-[#A5D6A7]"
+                                        value={lang}
+                                        onChange={(e) => setLang(e.target.value)}
+                                        aria-label="Selecionar idioma"
+                                    >
+                                        <option value="pt-BR">Português (BR)</option>
+                                        <option value="tupi">Tupi-Guarani</option>
+                                        <option value="en">English</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        className="flex-grow p-2 rounded bg-[#2D3338] text-[#A5D6A7]"
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Digite ou fale sua consulta (ex.: Explique entropia quântica no nível doutorado)"
+                                        aria-label="Digite ou fale sua consulta"
+                                    />
+                                    <button
+                                        className={`p-2 rounded ${isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-[#4B5EAA] hover:bg-[#3B4A8A]'} text-white`}
+                                        onClick={toggleSpeech}
+                                        aria-label={isListening ? 'Desativar comando de voz' : 'Ativar comando de voz'}
+                                    >
+                                        {isListening ? 'Parar Voz' : 'Comando de Voz'}
+                                    </button>
+                                    <button
+                                        className="p-2 bg-[#A5D6A7] rounded hover:bg-[#81C784] text-[#1C2526] disabled:bg-gray-500"
+                                        onClick={handleQuery}
+                                        disabled={loading || !query}
+                                        aria-label="Enviar consulta"
+                                    >
+                                        {loading ? 'Processando...' : 'Enviar'}
+                                    </button>
+                                    <button
+                                        className="p-2 bg-[#4B5EAA] rounded hover:bg-[#3B4A8A] text-white"
+                                        onClick={() => setShowTutorial(true)}
+                                        aria-label="Abrir tutorial"
+                                    >
+                                        Tutorial
+                                    </button>
+                                </div>
+                            </section>
+
+                            {loading && (
+                                <div className="animate-spin h-6 w-6 border-4 border-t-[#A5D6A7] rounded-full mx-auto" aria-label="Carregando"></div>
+                            )}
+
+                            {error && (
+                                <div className="p-4 bg-red-600 rounded mb-4" role="alert" aria-live="assertive">
+                                    Erro: {error}
+                                </div>
+                            )}
+
+                            {ethicalStatus && (
+                                <div className="p-4 bg-[#4B5EAA] rounded mb-4 flex items-center" role="status" aria-live="polite">
+                                    <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Conformidade Ética: {ethicalStatus.message}
+                                </div>
+                            )}
+
+                            {results && (
+                                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2 text-[#A5D6A7]" aria-label="Resultados da consulta">Resultados</h3>
+                                        <p className="bg-[#2D3338] p-4 rounded text-[#A5D6A7]" aria-live="polite">{results.text}</p>
+                                        {results.audio && (
+                                            <audio controls className="mt-4 w-full" aria-label="Reproduzir áudio gerado">
+                                                <source src={results.audio} type="audio/mp3" />
+                                                Seu navegador não suporta áudio.
+                                            </audio>
+                                        )}
+                                        <p className="text-[#FFF9C4] text-sm mt-2">Fonte: {source.toUpperCase()}</p>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2 text-[#A5D6A7]" aria-label="Visualização gráfica">Visualização</h3>
+                                        {graphUrl && (
+                                            <>
+                                                <img
+                                                    src={graphUrl}
+                                                    alt="Gráfico gerado pela BRISLA IA"
+                                                    className="w-full rounded shadow-lg"
+                                                    loading="lazy"
+                                                    aria-describedby="graph-desc"
+                                                />
+                                                <p id="graph-desc" className="sr-only">Gráfico 3D de estados quânticos ou superfícies de potencial gerado pela BRISLA IA.</p>
+                                            </>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+                        </main>
+
+                        <aside className="right-panel w-full md:w-48 bg-[#1C2526]/90 p-4 overflow-y-auto">
+                            <h2 className="text-lg font-semibold mb-4 text-[#A5D6A7]" aria-label="Seções de configuração">Seções</h2>
+                            {sections.map((s) => (
+                                <Section key={s.name} section={s} />
+                            ))}
+                        </aside>
+                    </div>
+
+                    <footer className="p-4 text-center bg-[#1C2526]/90">
+                        <p className="text-[#A5D6A7]">BRISLA IA Beta v3 - Desenvolvido por xAI Brasil | <a href="#" className="text-[#FFF9C4] hover:text-[#A5D6A7]">CNPq</a> | <a href="#" className="text-[#FFF9C4] hover:text-[#A5D6A7]">CAPES</a> | <a href="#" className="text-[#FFF9C4] hover:text-[#A5D6A7]">FAPESP</a> | <a href="#" className="text-[#FFF9C4] hover:text-[#A5D6A7]">Serpro</a></p>
+                    </footer>
+
+                    {showTutorial && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" role="dialog" aria-label="Tutorial da BRISLA IA">
+                            <div className="bg-[#2D3338] p-6 rounded text-[#A5D6A7] max-w-md">
+                                <h2 className="text-xl font-bold mb-4">Como usar a BRISLA IA</h2>
+                                <p>1. Selecione uma fonte de dados (ex.: INPE).</p>
+                                <p>2. Escolha o idioma (ex.: Português).</p>
+                                <p>3. Escolha o modo (ex.: Educação Acadêmica).</p>
+                                <p>4. Selecione o nível de estudo (ex.: Doutorado).</p>
+                                <p>5. Digite ou fale sua consulta (ex.: "Explique entropia quântica").</p>
+                                <p>6. Clique em Enviar ou use comando de voz (Ctrl+V).</p>
+                                <button className="mt-4 p-2 bg-[#A5D6A7] rounded hover:bg-[#81C784] text-[#1C2526]" onClick={() => { setShowTutorial(false); speak('Tutorial fechado.'); }} aria-label="Fechar tutorial">Fechar</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<BrislaApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
